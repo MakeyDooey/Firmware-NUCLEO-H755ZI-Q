@@ -6,6 +6,7 @@
  ******************************************************************************
  */
 /* USER CODE END Header */
+
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
@@ -14,14 +15,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "shared_logic.h" // Your custom shared memory structure
-#include <stdio.h>        // For printf retargeting
-#include <string.h>       // For memset
+#include "shared_logic.h"
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-/* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
@@ -34,25 +31,14 @@
 #endif
 /* USER CODE END PD */
 
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-
-/* USER CODE BEGIN PV */
-/* USER CODE END PV */
-
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MPU_Config(void);
 void MX_FREERTOS_Init(void);
-/* USER CODE BEGIN PFP */
 int __io_putchar(int ch);
-/* USER CODE END PFP */
 
-/* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Retarget printf to UART3 */
 int __io_putchar(int ch)
 {
     HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
@@ -66,44 +52,36 @@ int __io_putchar(int ch)
  */
 int main(void)
 {
-    /* USER CODE BEGIN 1 */
-    /* USER CODE END 1 */
-
-    /* USER CODE BEGIN Boot_Mode_Sequence_0 */
+    /* Boot Mode Sequence 0: Variables for sync */
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
     int32_t timeout;
 #endif
-    /* USER CODE END Boot_Mode_Sequence_0 */
 
-    /* USER CODE BEGIN Boot_Mode_Sequence_1 */
-#if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
-    /* Wait until CPU2 (M4) boots and enters in stop mode or timeout*/
-    timeout = 0xFFFF;
-    while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) != RESET) && (timeout-- > 0))
-        ;
-    /* If M4 fails to boot, we proceed anyway but UART will tell us */
-#endif
-    /* USER CODE END Boot_Mode_Sequence_1 */
-
-    /* MCU Configuration--------------------------------------------------------*/
+    /* MPU Configuration must happen BEFORE any memory access to Shared RAM */
+    MPU_Config();
 
     /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
     HAL_Init();
 
-    /* USER CODE BEGIN Init */
-    /* USER CODE END Init */
-
     /* Configure the system clock */
     SystemClock_Config();
 
-    /* MPU Configuration - Configures SRAM4 as Non-Cacheable for Shared Memory */
-    MPU_Config();
+    /* Boot Mode Sequence 1: Sync with M4 */
+#if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
+    /* Wait until CPU2 (M4) boots and enters in stop mode or timeout */
+    timeout = 0xFFFF;
+    while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) != RESET) && (timeout-- > 0))
+        ;
+#endif
 
-    /* USER CODE BEGIN Boot_Mode_Sequence_2 */
+    /* Initialize all configured peripherals */
+    MX_GPIO_Init();
+    MX_USART3_UART_Init();
+
+    /* Boot Mode Sequence 2: Prepare Shared RAM and Release M4 */
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
     /* 1. Initialize the Shared RAM region before M4 accesses it */
-    memset(SHARED_MEM, 0, sizeof(SharedMemory_t));
-
+    memset((void *)SHARED_MEM, 0, sizeof(SharedMemory_t));
     /* 2. Release Cortex-M4 by means of HSEM notification */
     __HAL_RCC_HSEM_CLK_ENABLE();
     HAL_HSEM_FastTake(HSEM_ID_0);
@@ -114,26 +92,17 @@ int main(void)
     while ((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) == RESET) && (timeout-- > 0))
         ;
 #endif
-    /* USER CODE END Boot_Mode_Sequence_2 */
-
-    /* USER CODE BEGIN SysInit */
-    /* USER CODE END SysInit */
-
-    /* Initialize all configured peripherals */
-    MX_GPIO_Init();
-    MX_USART3_UART_Init();
 
     /* USER CODE BEGIN 2 */
     // Raw Breadcrumb to prove UART is alive before FreeRTOS starts
-    char *msg = "\r\n--- M7 MANAGER STARTING ---\r\n";
+    char *msg = "\r\n--- M7 MANAGER STARTING (Dual Core Sync OK) ---\r\n";
     HAL_UART_Transmit(&huart3, (uint8_t *)msg, strlen(msg), 1000);
-
     /* USER CODE END 2 */
 
     /* Init scheduler */
     osKernelInitialize();
 
-    /* Call init function for freertos objects (in cmsis_os2.c) */
+    /* Call init function for freertos objects */
     MX_FREERTOS_Init();
 
     /* Start scheduler */
@@ -146,25 +115,18 @@ int main(void)
 
 /**
  * @brief System Clock Configuration
- * @retval None
  */
 void SystemClock_Config(void)
 {
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
     RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-    /** Supply configuration update enable - SWITCHED TO LDO FOR COMPATIBILITY
-     */
     HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
-
-    /** Configure the main internal regulator output voltage
-     */
     __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
 
     while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {
     }
 
-    /** Initializes the RCC Oscillators */
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
     RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
     RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -173,7 +135,6 @@ void SystemClock_Config(void)
         Error_Handler();
     }
 
-    /** Initializes the CPU, AHB and APB buses clocks */
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 |
                                   RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_D3PCLK1 |
                                   RCC_CLOCKTYPE_D1PCLK1;
@@ -190,16 +151,15 @@ void SystemClock_Config(void)
     }
 }
 
-/* MPU Configuration */
-void MPU_Config(void)
+/* MPU Configuration: Forces SRAM4 to be Non-Cacheable */
+static void MPU_Config(void)
 {
     MPU_Region_InitTypeDef MPU_InitStruct = {0};
 
+    /* Disable the MPU */
     HAL_MPU_Disable();
 
-    /** Configure SRAM4 (0x38000000) as Non-Cacheable and Shareable
-     * This ensures M7 and M4 always see the same data without needing cache cleans.
-     */
+    /* Configure SRAM4 (0x38000000) as Non-Cacheable and Shareable */
     MPU_InitStruct.Enable = MPU_REGION_ENABLE;
     MPU_InitStruct.Number = MPU_REGION_NUMBER0;
     MPU_InitStruct.BaseAddress = 0x38000000;
@@ -213,6 +173,8 @@ void MPU_Config(void)
     MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
 
     HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
+    /* Re-enable the MPU */
     HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 }
 

@@ -34,21 +34,22 @@ typedef struct __attribute__((packed))
  */
 typedef struct __attribute__((packed))
 {
-    uint32_t program_length; // Number of valid steps in the array
-    uint32_t run_flag;       // 0: Stop, 1: Run Once, 2: Loop
-    uint8_t button_state;    // M7 writes, M4 (or CLI) reads
+    volatile uint32_t program_length; // Number of valid steps in the array
+    volatile uint32_t run_flag;       // 0: Stop, 1: Run Once, 2: Loop
+    volatile uint32_t button_state;   // M7 writes, M4 (or CLI) reads
+    volatile uint32_t m4_heartbeat;
 
     /* * Buffer for up to 64 commands.
      * Total size: 64 * 12 bytes = 768 bytes.
      */
-    Step_t steps[64];
+    volatile Step_t steps[64];
 } SharedMemory_t;
 
 /**
  * Declare the mailbox variable and force it into the .shared_data section.
  * 'extern' is used here so you can define it in a .c file once.
  */
-extern SharedMemory_t mailbox;
+// extern SharedMemory_t mailbox;
 
 /**
  * @brief Helper Macro to access the shared memory

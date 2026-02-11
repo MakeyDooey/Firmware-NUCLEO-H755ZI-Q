@@ -160,8 +160,12 @@ void RegisterCLICommands(void)
 
 BaseType_t prvPeekCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString)
 {
-    snprintf(pcWriteBuffer, xWriteBufferLen, "M4 Status: %lu | Steps: %lu | Button: %d\r\n",
-             SHARED_MEM->run_flag, SHARED_MEM->program_length, SHARED_MEM->button_state);
+    // Added Heartbeat to the output string
+    snprintf(pcWriteBuffer, xWriteBufferLen,
+             "M4 Status: %lu | Steps: %lu | Heartbeat: %lu | Button: %ld\r\n", SHARED_MEM->run_flag,
+             SHARED_MEM->program_length,
+             SHARED_MEM->m4_heartbeat, // <--- Add this
+             SHARED_MEM->button_state);
     return pdFALSE;
 }
 
