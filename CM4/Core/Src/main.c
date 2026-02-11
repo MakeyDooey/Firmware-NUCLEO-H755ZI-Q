@@ -14,6 +14,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "shared_logic.h" // Shared memory mailbox
+#include <stdint.h>
 /* USER CODE END Includes */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -44,52 +45,56 @@ int main(void)
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 
     // 2. DEFAULT STATE: Turn on Yellow LED to signal successful M4 boot
-    HAL_GPIO_WritePin(yellow_led_GPIO_Port, yellow_led_Pin, GPIO_PIN_SET);
 
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1) {
+        HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin,
+                          GPIO_PIN_SET); // Yellow LED ON by default
+        /*
         // The "Hard Loop": Checking the mailbox in SRAM4
-        if (SHARED_MEM->run_flag > 0) {
-            for (uint32_t i = 0; i < SHARED_MEM->program_length; i++) {
-                Step_t step = SHARED_MEM->steps[i];
+             //     production)
+            if (SHARED_MEM->run_flag > 0) {
+                for (uint32_t i = 0; i < SHARED_MEM->program_length; i++) {
+                    Step_t step = SHARED_MEM->steps[i];
 
-                switch (step.opcode) {
-                case OP_SET_GPIO:
-                    // Using your "green_led" user label
-                    HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin,
-                                      (step.pin_value > 0) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-                    break;
+                    switch (step.opcode) {
+                    case OP_SET_GPIO:
+                        // Using your "green_led" user label
+                        HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin,
+                                          (step.pin_value > 0) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                        break;
 
-                case OP_SET_PWM:
-                    // Update TIM1 Duty Cycle (0-65535 based on your MX config)
-                    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, step.pin_value);
-                    break;
+                    case OP_SET_PWM:
+                        // Update TIM1 Duty Cycle (0-65535 based on your MX config)
+                        __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, step.pin_value);
+                        break;
 
-                case OP_WAIT:
-                    // Deterministic delay using the M4's TIM4-based HAL_Delay
-                    HAL_Delay(step.duration_ms);
-                    break;
+                    case OP_WAIT:
+                        // Deterministic delay using the M4's TIM4-based HAL_Delay
+                        HAL_Delay(step.duration_ms);
+                        break;
 
-                default:
-                    break;
+                    default:
+                        break;
+                    }
+
+                    // High-priority exit: If M7 clears the flag mid-sequence
+                    if (SHARED_MEM->run_flag == 0)
+                        break;
                 }
 
-                // High-priority exit: If M7 clears the flag mid-sequence
-                if (SHARED_MEM->run_flag == 0)
-                    break;
+                // Mode 1: Run Once. Mode 2: Loop (don't clear flag)
+                if (SHARED_MEM->run_flag == 1) {
+                    SHARED_MEM->run_flag = 0;
+                }
+            } else {
+                // Idle state: keep jitter low by not doing much
+                __WFI(); // Wait For Interrupt (saves power until a timer tick occurs)
             }
-
-            // Mode 1: Run Once. Mode 2: Loop (don't clear flag)
-            if (SHARED_MEM->run_flag == 1) {
-                SHARED_MEM->run_flag = 0;
-            }
-        } else {
-            // Idle state: keep jitter low by not doing much
-            __WFI(); // Wait For Interrupt (saves power until a timer tick occurs)
-        }
+         */
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */

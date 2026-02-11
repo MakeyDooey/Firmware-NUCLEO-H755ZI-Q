@@ -25,18 +25,15 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-/* USER CODE BEGIN PD */
-#ifndef B1_Pin
-#define B1_Pin GPIO_PIN_13
-#define B1_GPIO_Port GPIOC
-#endif
-/* USER CODE END PD */
 osThreadId_t cliTaskHandle;
 const osThreadAttr_t cliTask_attributes = {
     .name = "cliTask",
-    .stack_size = 512 * 4, // CLI needs a bit more stack for string processing
+    .stack_size = 512 * 4,
     .priority = (osPriority_t)osPriorityNormal,
 };
+
+/* Internal Buffer for CLI */
+static char pcInputString[128];
 /* USER CODE END Variables */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -51,12 +48,18 @@ BaseType_t prvAddStepCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
 BaseType_t prvRunCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString);
 BaseType_t prvClearCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
                            const char *pcCommandString);
+
+/* Helper for direct UART string output */
+void CLI_UART_PutString(const char *s)
+{
+    HAL_UART_Transmit(&huart3, (uint8_t *)s, strlen(s), 100);
+}
 /* USER CODE END FunctionPrototypes */
 
 void MX_FREERTOS_Init(void);
 
 /**
- * @brief  FreeRTOS initialization
+ * @brief FreeRTOS initialization
  */
 void MX_FREERTOS_Init(void)
 {
@@ -76,51 +79,62 @@ void MX_FREERTOS_Init(void)
 void StartCLITask(void *argument)
 {
     char cRxChar;
-    static char pcInputString[128];
     int8_t cInputIndex = 0;
     char *pcOutputString;
 
     pcOutputString = FreeRTOS_CLIGetOutputBuffer();
 
-    printf("\r\n--- M7 CLI Ready ---\r\n> ");
+    /* Clear screen and show welcome */
+    CLI_UART_PutString("\033[2J\033[H"); // ANSI Clear Screen
+    CLI_UART_PutString("--- H755 M7 CLI MANAGER READY ---\r\n");
+    CLI_UART_PutString("> ");
 
     for (;;) {
-        // Poll USART3 (VCOM) for input
-        if (HAL_UART_Receive(&huart3, (uint8_t *)&cRxChar, 1, portMAX_DELAY) == HAL_OK) {
+        /* * Use a small timeout (10ms) instead of portMAX_DELAY.
+         * This prevents the UART peripheral from "locking" in a way that blocks
+         * other bus operations on the H7.
+         */
+        if (HAL_UART_Receive(&huart3, (uint8_t *)&cRxChar, 1, 10) == HAL_OK) {
 
+            /* 1. Handle Carriage Return or Line Feed */
             if (cRxChar == '\r' || cRxChar == '\n') {
-                printf("\r\n");
+                CLI_UART_PutString("\r\n");
                 pcInputString[cInputIndex] = '\0';
 
-                if (strlen(pcInputString) > 0) {
+                if (cInputIndex > 0) {
                     BaseType_t xMore;
                     do {
+                        /* Process the command */
                         xMore = FreeRTOS_CLIProcessCommand(pcInputString, pcOutputString,
                                                            configCOMMAND_INT_MAX_OUTPUT_SIZE);
-                        printf("%s", pcOutputString);
+                        /* Output the result */
+                        CLI_UART_PutString(pcOutputString);
                     } while (xMore != pdFALSE);
                 }
 
-                printf("\r\n> ");
+                CLI_UART_PutString("\r\n> ");
                 cInputIndex = 0;
                 memset(pcInputString, 0, sizeof(pcInputString));
-            } else if (cRxChar == '\b' || cRxChar == 127) { // Backspace
+            }
+            /* 2. Handle Backspace (ASCII 8 or 127) */
+            else if (cRxChar == '\b' || cRxChar == 127) {
                 if (cInputIndex > 0) {
                     cInputIndex--;
-                    printf("\b \b");
+                    CLI_UART_PutString("\b \b"); // Move back, space (erase), move back
                 }
-            } else {
-                if (cInputIndex < 127) {
-                    printf("%c", cRxChar);
+            }
+            /* 3. Handle Normal Characters */
+            else {
+                if (cInputIndex < (sizeof(pcInputString) - 1)) {
+                    /* Echo character back to terminal */
+                    HAL_UART_Transmit(&huart3, (uint8_t *)&cRxChar, 1, 10);
                     pcInputString[cInputIndex++] = cRxChar;
                 }
             }
         }
 
-        // Update shared button state for M4 visibility
-        // Force use of PC13 (Blue Button) regardless of CubeMX labeling
-        osDelay(100); // Poll every 100ms
-        SHARED_MEM->button_state = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET);
+        /* Essential for FreeRTOS: allow other tasks to yield if no input */
+        osDelay(1);
     }
 }
 
@@ -131,8 +145,8 @@ void RegisterCLICommands(void)
 {
     static const CLI_Command_Definition_t xPeek = {"peek", "peek: Show shared memory status\r\n",
                                                    prvPeekCommand, 0};
-    static const CLI_Command_Definition_t xAdd = {
-        "add", "add <op> <val> <ms>: Add step to M4 program\r\n", prvAddStepCommand, 3};
+    static const CLI_Command_Definition_t xAdd = {"add", "add <op> <val> <ms>: Add step to M4\r\n",
+                                                  prvAddStepCommand, 3};
     static const CLI_Command_Definition_t xRun = {"run", "run <mode>: 0=Stop, 1=Once, 2=Loop\r\n",
                                                   prvRunCommand, 1};
     static const CLI_Command_Definition_t xClear = {"clear", "clear: Clear the M4 program\r\n",
@@ -193,5 +207,4 @@ BaseType_t prvClearCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const ch
     strncpy(pcWriteBuffer, "Program cleared.\r\n", xWriteBufferLen);
     return pdFALSE;
 }
-
 /* USER CODE END Application */

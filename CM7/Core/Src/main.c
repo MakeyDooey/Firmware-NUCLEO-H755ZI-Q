@@ -91,9 +91,6 @@ int main(void)
     HAL_Init();
 
     /* USER CODE BEGIN Init */
-    MX_USART3_UART_Init();
-    char *emergency_msg = "\r\n--- STAGE 1: UART ALIVE ---\r\n";
-    HAL_UART_Transmit(&huart3, (uint8_t *)emergency_msg, 30, 1000);
     /* USER CODE END Init */
 
     /* Configure the system clock */
@@ -124,15 +121,13 @@ int main(void)
 
     /* Initialize all configured peripherals */
     MX_GPIO_Init();
-    //    MX_USART3_UART_Init();
+    MX_USART3_UART_Init();
 
     /* USER CODE BEGIN 2 */
     // Raw Breadcrumb to prove UART is alive before FreeRTOS starts
     char *msg = "\r\n--- M7 MANAGER STARTING ---\r\n";
     HAL_UART_Transmit(&huart3, (uint8_t *)msg, strlen(msg), 1000);
 
-    printf("System Clock: OK\r\n");
-    printf("MPU Shared RAM: OK\r\n");
     /* USER CODE END 2 */
 
     /* Init scheduler */
