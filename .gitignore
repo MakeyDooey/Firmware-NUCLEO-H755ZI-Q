@@ -34,10 +34,12 @@ compile_commands.json
 *.swp
 *.swo
 Session.vim
-
+*.log 
 # --- OS & Misc ---
 .DS_Store
 .direnv/
 .envrc
 .cache/
 vendors/
+.mxproject
+.docker_built
