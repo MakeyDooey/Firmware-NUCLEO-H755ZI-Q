@@ -13,10 +13,10 @@ all:
 	$(MAKE) $(CORE_M4)
 
 $(CORE_M7):
-	$(MAKE) -C $(CORE_M7) -j$(nproc)
+	$(MAKE) -C $(CORE_M7) -j8
 
 $(CORE_M4):
-	$(MAKE) -C $(CORE_M4) -j$(nproc)
+	$(MAKE) -C $(CORE_M4) -j8
 
 clean:
 	@echo "--- Cleaning Build Artifacts ---"

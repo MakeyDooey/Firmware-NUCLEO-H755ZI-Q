@@ -81,19 +81,17 @@ void StartCLITask(void *argument)
     char cRxChar;
     int8_t cInputIndex = 0;
     char *pcOutputString;
+    char *pcCommandToken;
+    const char *pcDelimiter = ";";
 
     pcOutputString = FreeRTOS_CLIGetOutputBuffer();
 
     /* Clear screen and show welcome */
     CLI_UART_PutString("\033[2J\033[H"); // ANSI Clear Screen
-    CLI_UART_PutString("--- H755 M7 CLI MANAGER READY ---\r\n");
+    CLI_UART_PutString(" --- READY (Semicolon Support Active) --- \r\n");
     CLI_UART_PutString("> ");
 
     for (;;) {
-        /* * Use a small timeout (10ms) instead of portMAX_DELAY.
-         * This prevents the UART peripheral from "locking" in a way that blocks
-         * other bus operations on the H7.
-         */
         if (HAL_UART_Receive(&huart3, (uint8_t *)&cRxChar, 1, 10) == HAL_OK) {
 
             /* 1. Handle Carriage Return or Line Feed */
@@ -102,14 +100,32 @@ void StartCLITask(void *argument)
                 pcInputString[cInputIndex] = '\0';
 
                 if (cInputIndex > 0) {
-                    BaseType_t xMore;
-                    do {
-                        /* Process the command */
-                        xMore = FreeRTOS_CLIProcessCommand(pcInputString, pcOutputString,
-                                                           configCOMMAND_INT_MAX_OUTPUT_SIZE);
-                        /* Output the result */
-                        CLI_UART_PutString(pcOutputString);
-                    } while (xMore != pdFALSE);
+                    /* --- MULTI-COMMAND LOGIC START --- */
+                    // Get the first command before a semicolon
+                    pcCommandToken = strtok(pcInputString, pcDelimiter);
+
+                    while (pcCommandToken != NULL) {
+                        BaseType_t xMore;
+
+                        // Optional: Trim leading space if user typed "cmd1; cmd2"
+                        while (*pcCommandToken == ' ')
+                            pcCommandToken++;
+
+                        if (strlen(pcCommandToken) > 0) {
+                            do {
+                                /* Process the individual command token */
+                                xMore =
+                                    FreeRTOS_CLIProcessCommand(pcCommandToken, pcOutputString,
+                                                               configCOMMAND_INT_MAX_OUTPUT_SIZE);
+                                /* Output the result */
+                                CLI_UART_PutString(pcOutputString);
+                            } while (xMore != pdFALSE);
+                        }
+
+                        // Get the next command in the sequence
+                        pcCommandToken = strtok(NULL, pcDelimiter);
+                    }
+                    /* --- MULTI-COMMAND LOGIC END --- */
                 }
 
                 CLI_UART_PutString("\r\n> ");
@@ -120,20 +136,17 @@ void StartCLITask(void *argument)
             else if (cRxChar == '\b' || cRxChar == 127) {
                 if (cInputIndex > 0) {
                     cInputIndex--;
-                    CLI_UART_PutString("\b \b"); // Move back, space (erase), move back
+                    CLI_UART_PutString("\b \b");
                 }
             }
             /* 3. Handle Normal Characters */
             else {
                 if (cInputIndex < (sizeof(pcInputString) - 1)) {
-                    /* Echo character back to terminal */
                     HAL_UART_Transmit(&huart3, (uint8_t *)&cRxChar, 1, 10);
                     pcInputString[cInputIndex++] = cRxChar;
                 }
             }
         }
-
-        /* Essential for FreeRTOS: allow other tasks to yield if no input */
         osDelay(1);
     }
 }
@@ -145,8 +158,8 @@ void RegisterCLICommands(void)
 {
     static const CLI_Command_Definition_t xPeek = {"peek", "peek: Show shared memory status\r\n",
                                                    prvPeekCommand, 0};
-    static const CLI_Command_Definition_t xAdd = {"add", "add <op> <val> <ms>: Add step to M4\r\n",
-                                                  prvAddStepCommand, 3};
+    static const CLI_Command_Definition_t xAdd = {"add", "add <op> <val> : Add step to M4\r\n",
+                                                  prvAddStepCommand, 2};
     static const CLI_Command_Definition_t xRun = {"run", "run <mode>: 0=Stop, 1=Once, 2=Loop\r\n",
                                                   prvRunCommand, 1};
     static const CLI_Command_Definition_t xClear = {"clear", "clear: Clear the M4 program\r\n",
@@ -172,25 +185,17 @@ BaseType_t prvPeekCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const cha
 BaseType_t prvAddStepCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
                              const char *pcCommandString)
 {
-    const char *p1, *p2, *p3;
-    BaseType_t l1, l2, l3;
+    const char *p1, *p2;
+    BaseType_t l1, l2;
 
     p1 = FreeRTOS_CLIGetParameter(pcCommandString, 1, &l1);
     p2 = FreeRTOS_CLIGetParameter(pcCommandString, 2, &l2);
-    p3 = FreeRTOS_CLIGetParameter(pcCommandString, 3, &l3);
 
     uint32_t current_idx = SHARED_MEM->program_length; // Use a clear local name
 
     if (current_idx < 64) {
         SHARED_MEM->steps[current_idx].opcode = (uint32_t)atoi(p1);
         SHARED_MEM->steps[current_idx].pin_value = (uint32_t)atoi(p2);
-        SHARED_MEM->steps[current_idx].duration_ms = (uint32_t)atoi(p3);
-
-        // Debug output to terminal
-        printf("Debug: Slot %lu, Op %lu, Val %lu, Ms %lu\r\n", current_idx,
-               SHARED_MEM->steps[current_idx].opcode, SHARED_MEM->steps[current_idx].pin_value,
-               SHARED_MEM->steps[current_idx].duration_ms);
-
         SHARED_MEM->program_length++;
         snprintf(pcWriteBuffer, xWriteBufferLen, "Added Step %lu\r\n", current_idx);
     } else {

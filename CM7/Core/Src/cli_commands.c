@@ -18,18 +18,16 @@ BaseType_t prvPeekCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const cha
 BaseType_t prvAddStepCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
                              const char *pcCommandString)
 {
-    const char *p1, *p2, *p3;
-    BaseType_t l1, l2, l3;
+    const char *p1, *p2;
+    BaseType_t l1, l2;
 
     p1 = FreeRTOS_CLIGetParameter(pcCommandString, 1, &l1);
     p2 = FreeRTOS_CLIGetParameter(pcCommandString, 2, &l2);
-    p3 = FreeRTOS_CLIGetParameter(pcCommandString, 3, &l3);
 
     if (SHARED_MEM->program_length < 64) {
         uint32_t idx = SHARED_MEM->program_length;
         SHARED_MEM->steps[idx].opcode = atoi(p1);
         SHARED_MEM->steps[idx].pin_value = atoi(p2);
-        SHARED_MEM->steps[idx].duration_ms = atoi(p3);
         SHARED_MEM->program_length++;
 
         snprintf(pcWriteBuffer, xWriteBufferLen, "Step %lu added.\r\n", idx);

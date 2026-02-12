@@ -46,6 +46,8 @@ int main(void)
 
     // 2. Clear any local states and ensure we start with LED OFF
     HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(yellow_led_GPIO_Port, yellow_led_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(red_led_GPIO_Port, red_led_Pin, GPIO_PIN_RESET);
     /* USER CODE END 2 */
 
     /* Infinite loop */
@@ -71,17 +73,63 @@ int main(void)
                 Step_t step = SHARED_MEM->steps[i];
 
                 switch (step.opcode) {
-                case OP_SET_GPIO: // Opcode 1
-                    HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin,
-                                      (step.pin_value > 0) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                case OP_LED_CONTROL: {
+                    uint32_t p = step.pin_value;
+
+                    // 1. Validation: Ensure this is a GPIO/LED intended command
+                    if ((p & FLAG_GPIO_TYPE) && (p & FLAG_LED_TYPE)) {
+
+                        // Determine the action once to save cycles
+                        uint8_t action = 0;
+                        if (p & FLAG_ACTION_ON)
+                            action = 1;
+                        else if (p & FLAG_ACTION_OFF)
+                            action = 2;
+                        else if (p & FLAG_ACTION_TOG)
+                            action = 3;
+
+                        if (action > 0) {
+                            // Check Red LED bit
+                            if (p & MASK_RED) {
+                                if (action == 1)
+                                    HAL_GPIO_WritePin(red_led_GPIO_Port, red_led_Pin, GPIO_PIN_SET);
+                                else if (action == 2)
+                                    HAL_GPIO_WritePin(red_led_GPIO_Port, red_led_Pin,
+                                                      GPIO_PIN_RESET);
+                                else if (action == 3)
+                                    HAL_GPIO_TogglePin(red_led_GPIO_Port, red_led_Pin);
+                            }
+
+                            // Check Yellow LED bit (independent of Red)
+                            if (p & MASK_YELLOW) {
+                                if (action == 1)
+                                    HAL_GPIO_WritePin(yellow_led_GPIO_Port, yellow_led_Pin,
+                                                      GPIO_PIN_SET);
+                                else if (action == 2)
+                                    HAL_GPIO_WritePin(yellow_led_GPIO_Port, yellow_led_Pin,
+                                                      GPIO_PIN_RESET);
+                                else if (action == 3)
+                                    HAL_GPIO_TogglePin(yellow_led_GPIO_Port, yellow_led_Pin);
+                            }
+
+                            // Check Green LED bit (independent of Red/Yellow)
+                            if (p & MASK_GREEN) {
+                                if (action == 1)
+                                    HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin,
+                                                      GPIO_PIN_SET);
+                                else if (action == 2)
+                                    HAL_GPIO_WritePin(green_led_GPIO_Port, green_led_Pin,
+                                                      GPIO_PIN_RESET);
+                                else if (action == 3)
+                                    HAL_GPIO_TogglePin(green_led_GPIO_Port, green_led_Pin);
+                            }
+                        }
+                    }
                     break;
+                }
 
                 case OP_SET_PWM: // Opcode 2
                     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, step.pin_value);
-                    break;
-
-                case OP_WAIT: // Opcode 3
-                    HAL_Delay(step.duration_ms);
                     break;
 
                 default:
