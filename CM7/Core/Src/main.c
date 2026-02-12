@@ -60,6 +60,8 @@ int main(void)
     /* MPU Configuration must happen BEFORE any memory access to Shared RAM */
     MPU_Config();
 
+    SCB_DisableDCache();
+
     /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
     HAL_Init();
 

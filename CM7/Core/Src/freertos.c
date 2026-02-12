@@ -179,17 +179,34 @@ BaseType_t prvAddStepCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
     p2 = FreeRTOS_CLIGetParameter(pcCommandString, 2, &l2);
     p3 = FreeRTOS_CLIGetParameter(pcCommandString, 3, &l3);
 
-    if (SHARED_MEM->program_length < 64) {
-        uint32_t idx = SHARED_MEM->program_length;
-        SHARED_MEM->steps[idx].opcode = (uint32_t)atoi(p1);
-        SHARED_MEM->steps[idx].pin_value = (uint32_t)atoi(p2);
-        SHARED_MEM->steps[idx].duration_ms = (uint32_t)atoi(p3);
+    uint32_t current_idx = SHARED_MEM->program_length; // Use a clear local name
+
+    if (current_idx < 64) {
+        SHARED_MEM->steps[current_idx].opcode = (uint32_t)atoi(p1);
+        SHARED_MEM->steps[current_idx].pin_value = (uint32_t)atoi(p2);
+        SHARED_MEM->steps[current_idx].duration_ms = (uint32_t)atoi(p3);
+
+        // Debug output to terminal
+        printf("Debug: Slot %lu, Op %lu, Val %lu, Ms %lu\r\n", current_idx,
+               SHARED_MEM->steps[current_idx].opcode, SHARED_MEM->steps[current_idx].pin_value,
+               SHARED_MEM->steps[current_idx].duration_ms);
+
         SHARED_MEM->program_length++;
-        snprintf(pcWriteBuffer, xWriteBufferLen, "Added Step %lu [Op:%s Val:%s Ms:%s]\r\n", idx, p1,
-                 p2, p3);
+        snprintf(pcWriteBuffer, xWriteBufferLen, "Added Step %lu\r\n", current_idx);
     } else {
-        strncpy(pcWriteBuffer, "Error: M4 Buffer Full\r\n", xWriteBufferLen);
+        strncpy(pcWriteBuffer, "Error: Full\r\n", xWriteBufferLen);
     }
+    return pdFALSE;
+}
+
+// And fix the memset warning in prvClearCommand:
+BaseType_t prvClearCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString)
+{
+    SHARED_MEM->run_flag = 0;
+    SHARED_MEM->program_length = 0;
+    // Cast to (void*) to ignore volatile for the duration of the wipe
+    memset((void *)SHARED_MEM->steps, 0, sizeof(SHARED_MEM->steps));
+    strncpy(pcWriteBuffer, "Cleared.\r\n", xWriteBufferLen);
     return pdFALSE;
 }
 
@@ -203,12 +220,4 @@ BaseType_t prvRunCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char
     return pdFALSE;
 }
 
-BaseType_t prvClearCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString)
-{
-    SHARED_MEM->run_flag = 0;
-    SHARED_MEM->program_length = 0;
-    memset(SHARED_MEM->steps, 0, sizeof(SHARED_MEM->steps));
-    strncpy(pcWriteBuffer, "Program cleared.\r\n", xWriteBufferLen);
-    return pdFALSE;
-}
 /* USER CODE END Application */
