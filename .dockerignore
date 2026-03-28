@@ -1,58 +1,46 @@
-# --- Version Control ---
+# --- Git & CI ---
 .git
 .gitignore
 .github
 
-# --- Build Artifacts (Host-side) ---
-# We ignore these because Docker should create its own fresh build/ directory
-build/
-bin/
-obj/
+# --- Build Artifacts (Global & Recursive) ---
+**/build/
+**/bin/
+**/obj/
 *.elf
 *.bin
-*.hex
 *.map
+*.hex
 *.list
 *.o
 *.d
 *.su
-
-# --- Precompiled Headers (Host-side) ---
-# Never copy host-compiled .gch files into the container; they are OS-dependent
 *.gch
 
-# --- Tooling & Debugging ---
-.gdb_history
-openocd.log
-*.svd
-.gdbinit
-.ccache/
-scripts/makefile/
+# --- Documentation & Drivers (Heavy folders) ---
+Drivers/CMSIS/docs/
+Drivers/STM32H7xx_HAL_Driver/docs/
+# Exclude standard template source files not needed for your build
+Drivers/CMSIS/Device/ST/STM32H7xx/Source/Templates
 
-# --- IDEs & Editor Configuration ---
-.nvim/
-.lsp/
-.clangd/
-.clangd
-compile_commands.json
-.undodir/
-*.swp
-*.swo
-Session.vim
+# --- Local Tooling & LSP ---
 .vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# --- OS Junk ---
+.nvim/
+.clangd/
+.lsp/
+compile_commands.json
+.ccache/
+openocd.log
+.gdb_history
+*.log
+# --- OS Metadata ---
 .DS_Store
 Thumbs.db
 .direnv/
 .envrc
-.cache/
-vendors/
 
-# --- Docker Specifics ---
-# We don't need the Dockerfile or the ignore file inside the container itself
-Dockerfile
-.dockerignore
+# --- STM32 Specific ---
+# Ignore the CubeMX project file if you don't want it in the container
+# Firmware.ioc 
+# Ignore the automated backups CubeMX makes
+*.bak
